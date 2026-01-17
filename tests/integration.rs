@@ -69,10 +69,12 @@ async fn test_full_flow_submit_process_complete() {
     };
 
     let executor = Executor::new(backend.clone(), handler, config);
+    let token = tokio_util::sync::CancellationToken::new();
+    let cloned_token = token.clone();
     
     // Lancer l'executor dans une tâche séparée
     let executor_handle = tokio::spawn(async move {
-        executor.run().await
+        executor.run(cloned_token).await
     });
 
     // Attendre que le job soit traité
@@ -82,7 +84,8 @@ async fn test_full_flow_submit_process_complete() {
     assert_eq!(completed_count.load(Ordering::SeqCst), 1);
 
     // Nettoyer
-    executor_handle.abort();
+    token.cancel(); // Soft shutdown
+    let _ = executor_handle.await; // Wait for it to finish
     let _ = backend.delete_job(job_id).await;
 }
 
@@ -158,8 +161,11 @@ async fn test_retry_on_failure() {
     };
 
     let executor = Executor::new(backend.clone(), handler, config);
+    let token = tokio_util::sync::CancellationToken::new();
+    let cloned_token = token.clone();
+
     let executor_handle = tokio::spawn(async move {
-        executor.run().await
+        executor.run(cloned_token).await
     });
 
     // Attendre le traitement et les retries
@@ -169,7 +175,8 @@ async fn test_retry_on_failure() {
     // Note: Dans un vrai test, on vérifierait les métriques ou les logs
 
     // Cleanup
-    executor_handle.abort();
+    token.cancel();
+    let _ = executor_handle.await;
     let _ = backend.delete_job(job_id).await;
 }
 

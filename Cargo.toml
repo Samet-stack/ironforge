@@ -25,6 +25,7 @@ metrics-exporter-prometheus = "0.14"
 thiserror = "1"
 async-trait = "0.1"
 tower-http = { version = "0.5", features = ["trace"] }
+tokio-util = "0.7"
 
 [dev-dependencies]
 tokio-test = "0.4"

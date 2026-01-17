@@ -104,6 +104,45 @@ pub async fn create_job<Q: QueueBackend>(
     ))
 }
 
+#[derive(Debug, Serialize)]
+pub struct BatchResponse {
+    pub count: usize,
+}
+
+/// Créer plusieurs jobs en batch
+pub async fn create_jobs_batch<Q: QueueBackend>(
+    State(queue): State<Arc<Q>>,
+    Json(reqs): Json<Vec<CreateJobRequest>>,
+) -> Result<(StatusCode, Json<BatchResponse>), (StatusCode, Json<ErrorResponse>)> {
+    let jobs: Vec<Job> = reqs.into_iter()
+        .map(|req| {
+            let mut job = Job::new(req.kind, req.payload);
+            if let Some(p) = req.priority { job.priority = p; }
+            if let Some(r) = req.max_retries { job.max_retries = r; }
+            if let Some(t) = req.timeout_ms { job.timeout_ms = t; }
+            job.metadata = req.metadata;
+            job
+        })
+        .collect();
+
+    let count = jobs.len();
+    
+    queue.enqueue_batch(&jobs).await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to enqueue batch");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse::with_details("Failed to enqueue batch", e.to_string())),
+        )
+    })?;
+
+    tracing::info!(count = count, "Batch jobs created");
+
+    Ok((
+        StatusCode::CREATED,
+        Json(BatchResponse { count }),
+    ))
+}
+
 /// Récupérer un job par son ID
 pub async fn get_job<Q: QueueBackend>(
     State(queue): State<Arc<Q>>,

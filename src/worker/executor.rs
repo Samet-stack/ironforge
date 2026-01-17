@@ -38,6 +38,10 @@ pub struct Executor<Q: QueueBackend, H: JobHandler> {
     config: ExecutorConfig,
 }
 
+use tokio_util::sync::CancellationToken;
+
+// ... struct Executor ...
+
 impl<Q: QueueBackend + 'static, H: JobHandler + 'static> Executor<Q, H> {
     /// Crée un nouveau executor
     pub fn new(queue: Arc<Q>, handler: Arc<H>, config: ExecutorConfig) -> Self {
@@ -48,65 +52,82 @@ impl<Q: QueueBackend + 'static, H: JobHandler + 'static> Executor<Q, H> {
         }
     }
 
-    /// Démarre l'executor avec plusieurs workers
-    pub async fn run(&self) -> Result<()> {
-        tracing::info!(
-            worker_count = self.config.worker_count,
-            "Starting IronForge executor"
-        );
+    /// Démarre l'executor avec support graceful shutdown
+    pub async fn run(&self, shutdown_signal: CancellationToken) -> Result<()> {
+        let worker_count = self.config.worker_count;
+        tracing::info!(worker_count, "Starting IronForge executor");
 
         let mut handles = vec![];
 
-        // Lancer plusieurs workers en parallèle
-        for worker_id in 0..self.config.worker_count {
+        for worker_id in 0..worker_count {
             let queue = self.queue.clone();
             let handler = self.handler.clone();
             let config = self.config.clone();
+            let signal = shutdown_signal.clone();
 
             let handle = tokio::spawn(async move {
-                Self::worker_loop(worker_id, queue, handler, config).await
+                Self::worker_loop(worker_id, queue, handler, config, signal).await
             });
 
             handles.push(handle);
         }
 
-        // Attendre tous les workers
+        // On attend que le signal d'arrêt soit déclenché par le main
+        shutdown_signal.cancelled().await;
+        tracing::info!("🛑 Shutdown signal received, waiting for active jobs to finish...");
+
+        // On attend la fin de tous les workers
         for (i, handle) in handles.into_iter().enumerate() {
             if let Err(e) = handle.await {
                 tracing::error!(worker_id = i, error = %e, "Worker panicked");
             }
         }
-
+        
+        tracing::info!("✅ All workers stopped gracefully");
         Ok(())
     }
 
-    /// Boucle de traitement d'un worker
     async fn worker_loop(
         worker_id: usize,
         queue: Arc<Q>,
         handler: Arc<H>,
         config: ExecutorConfig,
+        signal: CancellationToken,
     ) -> Result<()> {
         tracing::info!(worker_id, "Worker started");
 
         loop {
-            // Dequeue un job (avec timeout)
-            let job = match queue.dequeue(config.dequeue_timeout_secs).await {
-                Ok(Some(job)) => job,
-                Ok(None) => {
-                    // Timeout, on continue
-                    continue;
+            // SI on a reçu l'ordre d'arrêt, on quitte la boucle
+            if signal.is_cancelled() {
+                break;
+            }
+
+            // On utilise tokio::select! pour écouter le dequeue OU le signal d'annulation
+            let job = tokio::select! {
+                // Cas 1: Stop demandé
+                _ = signal.cancelled() => {
+                    break;
                 }
-                Err(e) => {
-                    tracing::error!(worker_id, error = %e, "Failed to dequeue job");
-                    sleep(Duration::from_secs(1)).await;
-                    continue;
+                // Cas 2: Job reçu (ou timeout)
+                res = queue.dequeue(config.dequeue_timeout_secs) => {
+                    match res {
+                        Ok(Some(job)) => job,
+                        Ok(None) => continue, // Timeout normal, on boucle
+                        Err(e) => {
+                            tracing::error!(worker_id, error = %e, "Failed to dequeue job");
+                            sleep(Duration::from_secs(1)).await;
+                            continue;
+                        }
+                    }
                 }
             };
 
-            // Traiter le job
+            // Traitement du job
             Self::process_job(worker_id, &queue, &handler, job).await;
         }
+        
+        tracing::info!(worker_id, "Worker shutdown");
+        Ok(())
     }
 
     /// Traite un job avec gestion des erreurs et retry

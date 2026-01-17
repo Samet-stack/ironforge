@@ -103,9 +103,23 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         config.worker_count
     );
 
-    // Create and run executor
+    // Create executor
     let executor = Executor::new(backend, handler, config);
-    executor.run().await?;
+
+    // Setup cancellation token
+    let token = tokio_util::sync::CancellationToken::new();
+    let cloned_token = token.clone();
+
+    // Listen for Ctrl+C
+    tokio::spawn(async move {
+        if let Ok(()) = tokio::signal::ctrl_c().await {
+            tracing::info!("🛑 Received Ctrl+C, initializing graceful shutdown...");
+            cloned_token.cancel();
+        }
+    });
+
+    // Run with token
+    executor.run(token).await?;
 
     Ok(())
 }

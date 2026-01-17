@@ -12,6 +12,7 @@ pub fn create_router<Q: QueueBackend + 'static>(queue: Arc<Q>) -> Router {
     Router::new()
         // Jobs endpoints
         .route("/jobs", post(super::handlers::create_job::<Q>))
+        .route("/jobs/batch", post(super::handlers::create_jobs_batch::<Q>))
         .route("/jobs/:id", get(super::handlers::get_job::<Q>))
         .route("/jobs/:id", delete(super::handlers::delete_job::<Q>))
         .route("/jobs/:id/retry", post(super::handlers::retry_job::<Q>))

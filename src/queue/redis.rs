@@ -18,9 +18,33 @@ impl RedisQueueBackend {
         let client = Client::open(redis_url)?;
         let conn_manager = ConnectionManager::new(client).await?;
         
-        let enqueue_script = Script::new(include_str!("scripts/enqueue.lua"));
-        let move_to_dlq_script = Script::new(include_str!("scripts/move_to_dlq.lua"));
-        let delete_job_script = Script::new(include_str!("scripts/delete_job.lua"));
+        let enqueue_src = include_str!("scripts/enqueue.lua");
+        let move_to_dlq_src = include_str!("scripts/move_to_dlq.lua");
+        let delete_job_src = include_str!("scripts/delete_job.lua");
+
+        let enqueue_script = Script::new(enqueue_src);
+        let move_to_dlq_script = Script::new(move_to_dlq_src);
+        let delete_job_script = Script::new(delete_job_src);
+
+        // Pre-load scripts to ensure EVALSHA works in pipelines
+        let mut conn = conn_manager.clone();
+        let _: () = redis::cmd("SCRIPT")
+            .arg("LOAD")
+            .arg(enqueue_src)
+            .query_async(&mut conn)
+            .await?;
+            
+        let _: () = redis::cmd("SCRIPT")
+            .arg("LOAD")
+            .arg(move_to_dlq_src)
+            .query_async(&mut conn)
+            .await?;
+            
+        let _: () = redis::cmd("SCRIPT")
+            .arg("LOAD")
+            .arg(delete_job_src)
+            .query_async(&mut conn)
+            .await?;
 
         Ok(Self {
             conn_manager,
@@ -60,6 +84,45 @@ impl QueueBackend for RedisQueueBackend {
             kind = %job.kind,
             priority = ?job.priority,
             "Job enqueued (atomic)"
+        );
+        
+        Ok(())
+    }
+    
+    async fn enqueue_batch(&self, jobs: &[Job]) -> Result<()> {
+        let mut pipe = redis::pipe();
+        
+        // On construit le pipeline
+        for job in jobs {
+            let score = job.calculate_redis_score();
+            let job_json = serde_json::to_string(job)?;
+            
+            // On invoque le script Lua via le pipeline
+            // Note: redis-rs ne supporte pas directement Script.invoke dans un pipe
+            // On doit utiliser add_command avec les arguments bruts
+            // Cependant, pour simplifier et garder l'atomicité globale per-job, 
+            // on peut utiliser MULTI/EXEC ou pipelining simple.
+            // ICI: On fait confiance au pipeline pour la perf, et on réutilise le script.
+            // Mais `Script::invoke_async` ne marche pas dans un pipe.
+            // Workaround: On utilise pipe.cmd("EVALSHA")... si le script est chargé.
+            // Ou plus simple pour l'instant: atomicité par job, mais pipeline réseau.
+            
+            pipe.cmd("EVALSHA")
+                .arg(self.enqueue_script.get_hash())
+                .arg(2) // numkeys
+                .arg(Self::job_key(job.id))
+                .arg(Self::queue_key())
+                .arg(job_json)
+                .arg(job.id.to_string())
+                .arg(score);
+        }
+        
+        let mut conn = self.conn_manager.clone();
+        let _: () = pipe.query_async(&mut conn).await?;
+        
+        tracing::info!(
+            count = jobs.len(),
+            "Batch enqueued successfully"
         );
         
         Ok(())

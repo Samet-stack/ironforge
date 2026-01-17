@@ -8,6 +8,9 @@ pub trait QueueBackend: Send + Sync {
     /// Enqueue un job dans la queue principale
     async fn enqueue(&self, job: &Job) -> Result<()>;
     
+    /// Enqueue plusieurs jobs en une seule opération (batch)
+    async fn enqueue_batch(&self, jobs: &[Job]) -> Result<()>;
+    
     /// Dequeue le job le plus prioritaire (opération bloquante)
     async fn dequeue(&self, timeout_secs: u64) -> Result<Option<Job>>;
     
