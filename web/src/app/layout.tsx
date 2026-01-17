@@ -1,22 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
+import { GridBackground } from "@/components/grid-background";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
 export const metadata: Metadata = {
-  title: "IronForge Dashboard",
-  description: "Job Queue Management Dashboard",
+  title: "IronForge | Enterprise Job Queue Dashboard",
+  description: "High-performance distributed job queue management for modern enterprises",
+  keywords: ["job queue", "distributed systems", "enterprise", "ironforge"],
 };
 
 export default function RootLayout({
@@ -26,12 +23,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-[#0a0a14]`}
-      >
+      <body className={`${inter.variable} font-sans antialiased min-h-screen`}>
+        <GridBackground />
         <Sidebar />
         <Header />
-        <main className="ml-64 pt-16">
+        <main className="ml-72 pt-20">
           <div className="p-8">{children}</div>
         </main>
       </body>
