@@ -1,0 +1,17 @@
+# Dockerfile pour IronForge DAG Engine (OCaml)
+FROM ocaml/opam:debian-ocaml-5.1
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY --chown=opam:opam ironforge-dag/ ./ironforge-dag/
+
+# Install dune and build
+RUN cd ironforge-dag && \
+    opam install dune -y && \
+    eval $(opam env) && \
+    dune build
+
+# Run the main executable
+CMD ["dune", "exec", "--root", "ironforge-dag", "bin/main.exe"]
