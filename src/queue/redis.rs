@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use redis::{AsyncCommands, Client, aio::ConnectionManager};
+use redis::{AsyncCommands, Client, Script, aio::ConnectionManager};
 use uuid::Uuid;
 use crate::models::{Job, JobStatus, Result, IronForgeError};
 use super::traits::{QueueBackend, QueueStats};
@@ -7,6 +7,9 @@ use super::traits::{QueueBackend, QueueStats};
 /// Backend Redis pour la queue de jobs
 pub struct RedisQueueBackend {
     conn_manager: ConnectionManager,
+    enqueue_script: Script,
+    move_to_dlq_script: Script,
+    delete_job_script: Script,
 }
 
 impl RedisQueueBackend {
@@ -15,8 +18,15 @@ impl RedisQueueBackend {
         let client = Client::open(redis_url)?;
         let conn_manager = ConnectionManager::new(client).await?;
         
+        let enqueue_script = Script::new(include_str!("scripts/enqueue.lua"));
+        let move_to_dlq_script = Script::new(include_str!("scripts/move_to_dlq.lua"));
+        let delete_job_script = Script::new(include_str!("scripts/delete_job.lua"));
+
         Ok(Self {
             conn_manager,
+            enqueue_script,
+            move_to_dlq_script,
+            delete_job_script,
         })
     }
     
@@ -35,17 +45,21 @@ impl QueueBackend for RedisQueueBackend {
         let score = job.calculate_redis_score();
         let job_json = serde_json::to_string(job)?;
         
-        // Stocke les métadonnées du job
-        let _: () = conn.set(Self::job_key(job.id), &job_json).await?;
-        
-        // Ajoute à la queue principale (Sorted Set)
-        let _: () = conn.zadd(Self::queue_key(), job.id.to_string(), score).await?;
+        // Use atomic Lua script
+        let _: () = self.enqueue_script
+            .key(Self::job_key(job.id))
+            .key(Self::queue_key())
+            .arg(job_json)
+            .arg(job.id.to_string())
+            .arg(score)
+            .invoke_async(&mut conn)
+            .await?;
         
         tracing::info!(
             job_id = %job.id,
             kind = %job.kind,
             priority = ?job.priority,
-            "Job enqueued"
+            "Job enqueued (atomic)"
         );
         
         Ok(())
@@ -64,6 +78,8 @@ impl QueueBackend for RedisQueueBackend {
                 .map_err(|e| IronForgeError::QueueBackend(e.to_string()))?;
             
             // Récupère le job complet
+            // Note: There is still a race condition here if the job is deleted between BZPOPMIN and GET,
+            // but BZPOPMIN is atomic for the queue removal.
             if let Some(job) = self.get_job(job_id).await? {
                 tracing::debug!(job_id = %job.id, "Job dequeued");
                 return Ok(Some(job));
@@ -103,12 +119,16 @@ impl QueueBackend for RedisQueueBackend {
     async fn delete_job(&self, job_id: Uuid) -> Result<()> {
         let mut conn = self.conn_manager.clone();
         
-        // Supprime de toutes les structures
-        let _: () = conn.del(Self::job_key(job_id)).await?;
-        let _: () = conn.zrem(Self::queue_key(), job_id.to_string()).await?;
-        let _: () = conn.srem(Self::active_jobs_key(), job_id.to_string()).await?;
+        // Atomic delete using Lua
+        let _: () = self.delete_job_script
+            .key(Self::job_key(job_id))
+            .key(Self::queue_key())
+            .key(Self::active_jobs_key())
+            .arg(job_id.to_string())
+            .invoke_async(&mut conn)
+            .await?;
         
-        tracing::info!(job_id = %job_id, "Job deleted");
+        tracing::info!(job_id = %job_id, "Job deleted (atomic)");
         
         Ok(())
     }
@@ -117,18 +137,22 @@ impl QueueBackend for RedisQueueBackend {
         let mut conn = self.conn_manager.clone();
         let mut updated_job = job.clone();
         updated_job.status = JobStatus::DeadLetter;
+        let job_json = serde_json::to_string(&updated_job)?;
         
-        // Met à jour le statut
-        self.update_job(&updated_job).await?;
-        
-        // Ajoute à la DLQ
-        let _: () = conn.lpush(Self::dlq_key(), job.id.to_string()).await?;
+        // Atomic move to DLQ using Lua
+        let _: () = self.move_to_dlq_script
+            .key(Self::job_key(job.id))
+            .key(Self::dlq_key())
+            .arg(job_json)
+            .arg(job.id.to_string())
+            .invoke_async(&mut conn)
+            .await?;
         
         tracing::warn!(
             job_id = %job.id,
             kind = %job.kind,
             retry_count = job.retry_count,
-            "Job moved to DLQ"
+            "Job moved to DLQ (atomic)"
         );
         
         Ok(())
