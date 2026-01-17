@@ -24,9 +24,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   Type: {}", job.kind);
             println!("   Payload: {}", job.payload);
             
-            // Simuler le traitement
-            println!("   ⚙️  Traitement en cours...");
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            // Simuler le traitement avec progression
+            println!("   ⚙️  Traitement en cours (0%)...");
+            backend.update_progress(job.id, 0).await?;
+            
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            
+            println!("   ⚙️  Traitement en cours (50%)...");
+            backend.update_progress(job.id, 50).await?;
+            
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            
+            println!("   ⚙️  Traitement en cours (100%)...");
+            backend.update_progress(job.id, 100).await?;
             
             println!("   ✅ Job traité avec succès !\n");
             

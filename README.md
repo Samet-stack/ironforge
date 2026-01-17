@@ -17,6 +17,21 @@
 
 ---
 
+## 💡 Why use IronForge?
+
+**Short answer**: To make your apps faster and more reliable.
+
+Imagine a user signs up on your website. You want to:
+1.  Send them a welcome email.
+2.  Resize their profile picture.
+3.  Add them to your CRM.
+4.  Generate a PDF report.
+
+If you do all this *while* the user waits, your site will be slow (loading for 10 seconds).
+**With IronForge**, you just say "Do these things later" and show the "Success!" page instantly. IronForge handles the heavy lifting in the background, retry if it fails, and ensures nothing is lost.
+
+---
+
 ## 🎯 Features
 
 ### Core Capabilities

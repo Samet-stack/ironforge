@@ -60,6 +60,9 @@ pub struct Job {
     /// Nombre de tentatives effectuées
     pub retry_count: u8,
     
+    /// Progression du job (0-100)
+    pub progress: u8,
+
     /// Date de création
     pub created_at: DateTime<Utc>,
     
@@ -84,6 +87,7 @@ impl Job {
             status: JobStatus::Queued,
             max_retries: 3,
             retry_count: 0,
+            progress: 0,
             created_at: Utc::now(),
             scheduled_for: None,
             timeout_ms: 30_000, // 30 secondes par défaut

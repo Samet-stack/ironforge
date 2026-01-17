@@ -20,6 +20,9 @@ pub trait QueueBackend: Send + Sync {
     /// Met à jour un job existant
     async fn update_job(&self, job: &Job) -> Result<()>;
     
+    /// Met à jour la progression d'un job (0-100%)
+    async fn update_progress(&self, job_id: Uuid, progress: u8) -> Result<()>;
+    
     /// Supprime un job
     async fn delete_job(&self, job_id: Uuid) -> Result<()>;
     

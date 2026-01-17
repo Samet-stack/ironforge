@@ -9,7 +9,9 @@ pub struct RedisQueueBackend {
     conn_manager: ConnectionManager,
     enqueue_script: Script,
     move_to_dlq_script: Script,
+    move_to_dlq_script: Script,
     delete_job_script: Script,
+    update_progress_script: Script,
 }
 
 impl RedisQueueBackend {
@@ -21,10 +23,12 @@ impl RedisQueueBackend {
         let enqueue_src = include_str!("scripts/enqueue.lua");
         let move_to_dlq_src = include_str!("scripts/move_to_dlq.lua");
         let delete_job_src = include_str!("scripts/delete_job.lua");
+        let update_progress_src = include_str!("scripts/update_progress.lua");
 
         let enqueue_script = Script::new(enqueue_src);
         let move_to_dlq_script = Script::new(move_to_dlq_src);
         let delete_job_script = Script::new(delete_job_src);
+        let update_progress_script = Script::new(update_progress_src);
 
         // Pre-load scripts to ensure EVALSHA works in pipelines
         let mut conn = conn_manager.clone();
@@ -45,12 +49,19 @@ impl RedisQueueBackend {
             .arg(delete_job_src)
             .query_async(&mut conn)
             .await?;
+            
+        let _: () = redis::cmd("SCRIPT")
+            .arg("LOAD")
+            .arg(update_progress_src)
+            .query_async(&mut conn)
+            .await?;
 
         Ok(Self {
             conn_manager,
             enqueue_script,
             move_to_dlq_script,
             delete_job_script,
+            update_progress_script,
         })
     }
     
@@ -162,6 +173,22 @@ impl QueueBackend for RedisQueueBackend {
         } else {
             Ok(None)
         }
+    }
+    
+    async fn update_progress(&self, job_id: Uuid, progress: u8) -> Result<()> {
+        let mut conn = self.conn_manager.clone();
+        
+        // Atomic update via Lua
+        let _: () = self.update_progress_script
+            .key(Self::job_key(job_id))
+            .arg(progress)
+            .invoke_async(&mut conn)
+            .await
+            .map_err(|e| IronForgeError::QueueBackend(e.to_string()))?;
+            
+        tracing::debug!(job_id = %job_id, progress = progress, "Progress updated");
+        
+        Ok(())
     }
     
     async fn update_job(&self, job: &Job) -> Result<()> {
