@@ -1,3 +1,5 @@
 (library
  (name ironforge_dag)
- (modules dag cycle topo runner))
+ (libraries yojson dream lwt lwt.unix)
+ (modules dag cycle topo runner orchestrator server)
+ (preprocess (pps lwt_ppx)))

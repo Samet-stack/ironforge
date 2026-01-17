@@ -1,17 +1,25 @@
 # Dockerfile pour IronForge DAG Engine (OCaml)
 FROM ocaml/opam:debian-ocaml-5.1
 
+# Install system dependencies for Dream
+USER root
+RUN apt-get update && apt-get install -y libev-dev libgmp-dev libssl-dev pkg-config && rm -rf /var/lib/apt/lists/*
+USER opam
+
 # Set working directory
 WORKDIR /app
 
 # Copy project files
 COPY --chown=opam:opam ironforge-dag/ ./ironforge-dag/
 
-# Install dune and build
+# Install OCaml dependencies and build
 RUN cd ironforge-dag && \
-    opam install dune -y && \
+    opam install dune yojson dream lwt lwt_ppx -y && \
     eval $(opam env) && \
     dune build
 
-# Run the main executable
+# Expose the server port
+EXPOSE 8080
+
+# Default: run CLI demo (can override to run server)
 CMD ["dune", "exec", "--root", "ironforge-dag", "bin/main.exe"]
