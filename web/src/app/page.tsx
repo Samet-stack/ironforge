@@ -1,9 +1,25 @@
+"use client";
+
+import { useState, useCallback } from "react";
 import { StatCard } from "@/components/stat-card";
 import { ThroughputChart } from "@/components/throughput-chart";
 import { JobsTable } from "@/components/jobs-table";
 import { Zap, Clock, Server, Activity } from "lucide-react";
 
 export default function Dashboard() {
+  const [stats, setStats] = useState({
+    queued: 0,
+    processing: 0,
+    completed: 0,
+    failed: 0,
+  });
+
+  const handleStatsChange = useCallback((newStats: typeof stats) => {
+    setStats(newStats);
+  }, []);
+
+  const totalJobs = stats.queued + stats.processing + stats.completed + stats.failed;
+
   return (
     <div className="space-y-8">
       {/* Hero Section */}
@@ -42,41 +58,41 @@ export default function Dashboard() {
                 <Clock className="h-4 w-4 text-cyan-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Avg. Latency</p>
-                <p className="text-sm font-semibold">-</p>
+                <p className="text-xs text-muted-foreground">Total Jobs</p>
+                <p className="text-sm font-semibold">{totalJobs}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Stats Grid - Start at 0 */}
+      {/* Stats Grid - Updates in real-time */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Jobs in Queue"
-          value={0}
-          subtitle="Add jobs to get started"
+          value={stats.queued}
+          subtitle={stats.queued === 0 ? "Add jobs to get started" : `${stats.queued} waiting`}
           icon="queue"
           delay={100}
         />
         <StatCard
           title="Processing"
-          value={0}
-          subtitle="Assign jobs to workers"
+          value={stats.processing}
+          subtitle={stats.processing === 0 ? "Assign jobs to workers" : `${stats.processing} in progress`}
           icon="processing"
           delay={200}
         />
         <StatCard
           title="Completed Today"
-          value={0}
-          subtitle="No jobs completed yet"
+          value={stats.completed}
+          subtitle={stats.completed === 0 ? "No jobs completed yet" : `${stats.completed} done`}
           icon="completed"
           delay={300}
         />
         <StatCard
           title="Failed"
-          value={0}
-          subtitle="No failures"
+          value={stats.failed}
+          subtitle={stats.failed === 0 ? "No failures" : `${stats.failed} need attention`}
           icon="failed"
           delay={400}
         />
@@ -85,8 +101,8 @@ export default function Dashboard() {
       {/* Throughput Chart */}
       <ThroughputChart />
 
-      {/* Jobs Table */}
-      <JobsTable />
+      {/* Jobs Table - passes stats to parent */}
+      <JobsTable onStatsChange={handleStatsChange} />
 
       {/* Footer info */}
       <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground/50">

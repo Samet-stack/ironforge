@@ -10,9 +10,9 @@ export function GridBackground() {
             <div className="absolute inset-0 bg-grid-animated opacity-30" />
 
             {/* Radial glow effects */}
-            <div className="absolute top-0 left-1/4 h-[600px] w-[600px] rounded-full bg-violet-600/10 blur-[150px]" />
-            <div className="absolute bottom-0 right-1/4 h-[500px] w-[500px] rounded-full bg-cyan-600/10 blur-[150px]" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[800px] w-[800px] rounded-full bg-purple-600/5 blur-[200px]" />
+            <div className="absolute top-0 left-1/4 h-[600px] w-[600px] rounded-full bg-cyan-600/10 blur-[150px]" />
+            <div className="absolute bottom-0 right-1/4 h-[500px] w-[500px] rounded-full bg-teal-600/10 blur-[150px]" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[800px] w-[800px] rounded-full bg-cyan-600/5 blur-[200px]" />
 
             {/* Noise overlay for texture */}
             <div

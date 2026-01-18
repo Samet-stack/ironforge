@@ -19,13 +19,9 @@ export function Header() {
 
     return (
         <header className="fixed left-72 right-0 top-0 z-30 flex h-20 items-center justify-between border-b border-white/5 bg-background/60 px-8 backdrop-blur-xl">
-            {/* Left side - Breadcrumbs & Title */}
+            {/* Left side - IronForge title */}
             <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>Home</span>
-                    <ChevronRight className="h-4 w-4" />
-                    <span className="text-foreground font-medium">Dashboard</span>
-                </div>
+                <span className="text-xl font-bold gradient-text">IronForge</span>
             </div>
 
             {/* Center - Search */}
@@ -34,7 +30,7 @@ export function Header() {
                     className="relative group cursor-pointer"
                     onClick={() => alert('Search coming soon!')}
                 >
-                    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 transition-all hover:border-violet-500/30 hover:bg-white/10">
+                    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 transition-all hover:border-cyan-500/30 hover:bg-white/10">
                         <Search className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Search jobs, workflows...</span>
                         <div className="ml-auto flex items-center gap-1">
@@ -67,7 +63,7 @@ export function Header() {
                 {/* Notifications */}
                 <div className="relative">
                     <button
-                        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-all hover:border-violet-500/30 hover:bg-white/10"
+                        className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition-all hover:border-cyan-500/30 hover:bg-white/10"
                         onClick={() => setShowNotifications(!showNotifications)}
                     >
                         <Bell className="h-4 w-4 text-muted-foreground" />
@@ -90,7 +86,7 @@ export function Header() {
                             ].map((notif, i) => (
                                 <div key={i} className="flex gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer">
                                     <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${notif.type === 'error' ? 'bg-rose-500' :
-                                            notif.type === 'warning' ? 'bg-amber-500' : 'bg-cyan-500'
+                                        notif.type === 'warning' ? 'bg-amber-500' : 'bg-cyan-500'
                                         }`} />
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium">{notif.title}</p>
@@ -106,10 +102,10 @@ export function Header() {
                 {/* User avatar */}
                 <div className="relative">
                     <button
-                        className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 transition-all hover:border-violet-500/30 hover:bg-white/10"
+                        className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 transition-all hover:border-cyan-500/30 hover:bg-white/10"
                         onClick={() => setShowProfile(!showProfile)}
                     >
-                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center">
                             <span className="text-sm font-semibold text-white">ST</span>
                         </div>
                         <div className="text-left hidden lg:block">

@@ -29,7 +29,7 @@ const borderColors = {
 export function GlowCard({
     children,
     className,
-    glowColor = "violet",
+    glowColor = "cyan",
     hover = true
 }: GlowCardProps) {
     return (

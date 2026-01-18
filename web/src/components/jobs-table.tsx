@@ -3,6 +3,7 @@
 import { GlowCard } from "@/components/glow-card";
 import { WorkerAvatar } from "@/components/worker-avatar";
 import { AssignJobModal } from "@/components/assign-job-modal";
+import { CreateJobModal } from "@/components/create-job-modal";
 import {
     Table,
     TableBody,
@@ -25,10 +26,10 @@ import {
     Inbox,
     Plus,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // Job type
-interface Job {
+export interface Job {
     id: string;
     kind: string;
     status: string;
@@ -36,11 +37,18 @@ interface Job {
     created: string;
     duration: string;
     worker: string;
+    description?: string;
     assignee?: {
         id: string;
         name: string;
     };
 }
+
+// Export jobs state for other components
+export const useJobs = () => {
+    const [jobs, setJobs] = useState<Job[]>([]);
+    return { jobs, setJobs };
+};
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
     completed: { bg: "bg-emerald-500/10", text: "text-emerald-400", dot: "bg-emerald-400" },
@@ -57,17 +65,34 @@ const priorityConfig: Record<string, { bg: string; text: string }> = {
     low: { bg: "bg-slate-500/20", text: "text-slate-400" },
 };
 
-export function JobsTable() {
-    // Start with empty jobs - will be populated when jobs are created/assigned
+interface JobsTableProps {
+    onStatsChange?: (stats: { queued: number; processing: number; completed: number; failed: number }) => void;
+}
+
+export function JobsTable({ onStatsChange }: JobsTableProps) {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedFilter, setSelectedFilter] = useState("all");
     const [currentPage, setCurrentPage] = useState(1);
+    const [createModalOpen, setCreateModalOpen] = useState(false);
     const [assignModal, setAssignModal] = useState<{ isOpen: boolean; jobId: string; jobKind: string }>({
         isOpen: false,
         jobId: "",
         jobKind: "",
     });
+
+    // Update parent stats whenever jobs change
+    useEffect(() => {
+        if (onStatsChange) {
+            const stats = {
+                queued: jobs.filter(j => j.status === "queued").length,
+                processing: jobs.filter(j => j.status === "processing").length,
+                completed: jobs.filter(j => j.status === "completed").length,
+                failed: jobs.filter(j => j.status === "failed").length,
+            };
+            onStatsChange(stats);
+        }
+    }, [jobs, onStatsChange]);
 
     const filteredJobs = jobs.filter(job => {
         const matchesSearch = job.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -80,25 +105,41 @@ export function JobsTable() {
     const handleAssign = (workerId: string, workerName: string) => {
         setJobs(prev => prev.map(job =>
             job.id === assignModal.jobId
-                ? { ...job, assignee: { id: workerId, name: workerName } }
+                ? { ...job, assignee: { id: workerId, name: workerName }, status: "processing" }
                 : job
         ));
     };
 
-    // Function to add a new job (for demo purposes)
-    const addDemoJob = () => {
-        const jobTypes = ["Email Notification", "Data Processing", "Image Resize", "Payment Sync", "Report Generation"];
-        const priorities = ["low", "medium", "high", "critical"];
+    const handleCreateJob = (jobData: { kind: string; priority: string; description: string }) => {
         const newJob: Job = {
             id: `job_${Math.random().toString(36).substr(2, 8)}`,
-            kind: jobTypes[Math.floor(Math.random() * jobTypes.length)],
+            kind: jobData.kind,
             status: "queued",
-            priority: priorities[Math.floor(Math.random() * priorities.length)],
+            priority: jobData.priority,
             created: "Just now",
             duration: "-",
             worker: "-",
+            description: jobData.description,
         };
         setJobs(prev => [newJob, ...prev]);
+    };
+
+    const handleStartJob = (jobId: string) => {
+        setJobs(prev => prev.map(job =>
+            job.id === jobId ? { ...job, status: "processing" } : job
+        ));
+    };
+
+    const handleCompleteJob = (jobId: string) => {
+        setJobs(prev => prev.map(job =>
+            job.id === jobId ? { ...job, status: "completed", duration: `${Math.floor(Math.random() * 500) + 50}ms` } : job
+        ));
+    };
+
+    const handleRetryJob = (jobId: string) => {
+        setJobs(prev => prev.map(job =>
+            job.id === jobId ? { ...job, status: "queued" } : job
+        ));
     };
 
     return (
@@ -116,7 +157,7 @@ export function JobsTable() {
                         <div className="flex items-center gap-3">
                             {/* Add Job Button */}
                             <button
-                                onClick={addDemoJob}
+                                onClick={() => setCreateModalOpen(true)}
                                 className="flex items-center gap-2 h-9 px-4 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-sm font-medium text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all"
                             >
                                 <Plus className="h-4 w-4" />
@@ -137,11 +178,11 @@ export function JobsTable() {
 
                             {/* Filter buttons */}
                             <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1">
-                                {["all", "processing", "completed", "failed"].map((filter) => (
+                                {["all", "queued", "processing", "completed", "failed"].map((filter) => (
                                     <button
                                         key={filter}
                                         onClick={() => setSelectedFilter(filter)}
-                                        className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${selectedFilter === filter
+                                        className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${selectedFilter === filter
                                                 ? "bg-violet-500 text-white"
                                                 : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                                             }`}
@@ -166,10 +207,10 @@ export function JobsTable() {
                             </div>
                             <h4 className="text-lg font-semibold mb-2">No jobs yet</h4>
                             <p className="text-sm text-muted-foreground text-center max-w-sm mb-6">
-                                Create your first job to get started. Jobs will appear here once they are added to the queue.
+                                Create your first job to get started. You can choose the type and priority.
                             </p>
                             <button
-                                onClick={addDemoJob}
+                                onClick={() => setCreateModalOpen(true)}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 text-sm font-medium text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all"
                             >
                                 <Plus className="h-4 w-4" />
@@ -262,17 +303,29 @@ export function JobsTable() {
                                                                 </button>
                                                             )}
                                                             {job.status === 'failed' && (
-                                                                <button className="p-1.5 rounded-md hover:bg-white/10 text-amber-400" title="Retry">
+                                                                <button
+                                                                    onClick={() => handleRetryJob(job.id)}
+                                                                    className="p-1.5 rounded-md hover:bg-white/10 text-amber-400"
+                                                                    title="Retry"
+                                                                >
                                                                     <RotateCcw className="h-3.5 w-3.5" />
                                                                 </button>
                                                             )}
                                                             {job.status === 'processing' && (
-                                                                <button className="p-1.5 rounded-md hover:bg-white/10 text-orange-400" title="Pause">
-                                                                    <Pause className="h-3.5 w-3.5" />
+                                                                <button
+                                                                    onClick={() => handleCompleteJob(job.id)}
+                                                                    className="p-1.5 rounded-md hover:bg-white/10 text-emerald-400"
+                                                                    title="Mark Complete"
+                                                                >
+                                                                    <Play className="h-3.5 w-3.5" />
                                                                 </button>
                                                             )}
                                                             {job.status === 'queued' && (
-                                                                <button className="p-1.5 rounded-md hover:bg-white/10 text-emerald-400" title="Start">
+                                                                <button
+                                                                    onClick={() => handleStartJob(job.id)}
+                                                                    className="p-1.5 rounded-md hover:bg-white/10 text-emerald-400"
+                                                                    title="Start"
+                                                                >
                                                                     <Play className="h-3.5 w-3.5" />
                                                                 </button>
                                                             )}
@@ -317,6 +370,13 @@ export function JobsTable() {
                     )}
                 </GlowCard>
             </div>
+
+            {/* Create Job Modal */}
+            <CreateJobModal
+                isOpen={createModalOpen}
+                onClose={() => setCreateModalOpen(false)}
+                onCreate={handleCreateJob}
+            />
 
             {/* Assign Modal */}
             <AssignJobModal
