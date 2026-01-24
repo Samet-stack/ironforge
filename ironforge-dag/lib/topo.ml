@@ -2,49 +2,62 @@
    TOPO.ML - Tri topologique (Kahn's Algorithm)
    
    Calcule l'ordre d'exécution optimal des jobs.
-   Les jobs sans dépendances sont exécutés en premier.
+   Adapté pour utiliser la structure optimisée Dag.t
    ============================================================ *)
 
 open Dag
 
 (* Calcule les niveaux d'exécution (jobs parallélisables) *)
 let topological_levels (graph : dag) : node list list =
-  (* Copie des in-degrees *)
-  let degrees = Hashtbl.create (List.length graph) in
-  List.iter (fun n -> Hashtbl.add degrees n.id (in_degree n)) graph;
+  (* Récupère tous les nœuds *)
+  let nodes = Dag.all_nodes graph in
+  let count = List.length nodes in
   
-  let rec build_levels remaining acc =
-    if remaining = [] then
+  (* Table des in-degrees (nombre de dépendances restantes) *)
+  let degrees = Hashtbl.create count in
+  List.iter (fun n -> Hashtbl.add degrees n.id (in_degree n)) nodes;
+  
+  let rec build_levels remaining_count acc =
+    if remaining_count = 0 then
       List.rev acc
     else
-      (* Trouve les nœuds avec in_degree = 0 *)
+      (* Trouve les nœuds avec in_degree = 0 dans la table *)
+      (* Optimisation: On pourrait maintenir une liste `ready` séparée *)
       let ready = List.filter (fun n ->
-        Hashtbl.find degrees n.id = 0
-      ) remaining in
+        match Hashtbl.find_opt degrees n.id with
+        | Some 0 -> true
+        | _ -> false
+      ) nodes in
       
-      if ready = [] then
-        (* Cycle détecté ou erreur *)
+      (* Filtrer ceux qu'on a déjà traités (marqués -1) *)
+      let effective_ready = List.filter (fun n ->
+         Hashtbl.find degrees n.id = 0
+      ) ready in
+      
+      if effective_ready = [] && remaining_count > 0 then
+        (* Cycle détecté ou erreur, impossible d'avancer *)
         List.rev acc
       else begin
-        (* Décrémente les in_degrees des enfants *)
+        (* Pour chaque nœud prêt, décrémenter le degré des enfants *)
         List.iter (fun n ->
-          let children = get_children graph n.id in
-          List.iter (fun child ->
-            let d = Hashtbl.find degrees child.id in
-            Hashtbl.replace degrees child.id (d - 1)
-          ) children;
           (* Marque comme traité *)
-          Hashtbl.replace degrees n.id (-1)
-        ) ready;
+          Hashtbl.replace degrees n.id (-1);
+          
+          (* Utilise l'index d'adjacence optimisé pour trouver les enfants *)
+          let children = Dag.get_children graph n.id in
+          List.iter (fun child ->
+            match Hashtbl.find_opt degrees child.id with
+            | Some d when d > 0 -> Hashtbl.replace degrees child.id (d - 1)
+            | _ -> ()
+          ) children
+        ) effective_ready;
         
-        (* Continue avec les nœuds restants *)
-        let remaining' = List.filter (fun n ->
-          Hashtbl.find degrees n.id >= 0
-        ) remaining in
-        build_levels remaining' (ready :: acc)
+        (* Récursion *)
+        let processed_count = List.length effective_ready in
+        build_levels (remaining_count - processed_count) (effective_ready :: acc)
       end
   in
-  build_levels graph []
+  build_levels count []
 
 (* Retourne une liste plate dans l'ordre d'exécution *)
 let topological_sort (graph : dag) : node list =

@@ -37,6 +37,9 @@ pub trait QueueBackend: Send + Sync {
     
     /// Libère un verrou distribué
     async fn release_lock(&self, job_id: Uuid) -> Result<()>;
+
+    /// Valide le traitement d'un job (ACK pour Redis Streams)
+    async fn ack_job(&self, job_id: Uuid, stream_id: &str) -> Result<()>;
 }
 
 /// Statistiques de la queue

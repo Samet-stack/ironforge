@@ -74,6 +74,10 @@ pub struct Job {
     
     /// Métadonnées personnalisées (tags, etc.)
     pub metadata: HashMap<String, String>,
+
+    /// Redis Stream ID (pour ACK) - Interne seulement, non retourné dans l'API publique
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream_id: Option<String>,
 }
 
 impl Job {
@@ -91,7 +95,9 @@ impl Job {
             created_at: Utc::now(),
             scheduled_for: None,
             timeout_ms: 30_000, // 30 secondes par défaut
+            timeout_ms: 30_000, // 30 secondes par défaut
             metadata: HashMap::new(),
+            stream_id: None,
         }
     }
     

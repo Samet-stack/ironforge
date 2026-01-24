@@ -295,6 +295,13 @@ impl QueueBackend for RedisQueueBackend {
         
         Ok(())
     }
+
+    async fn ack_job(&self, job_id: Uuid, _stream_id: &str) -> Result<()> {
+        // No-op pour le backend Redis classique (List/ZSET)
+        // Le job est supprimé lors du dequeue (BZPOPMIN)
+        tracing::trace!(job_id = %job_id, "ACK ignored for classic Redis backend");
+        Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -2,6 +2,8 @@
    ORCHESTRATOR.ML - Machine à État pour Workflows
    ============================================================ *)
 
+open Dag
+
 (* État d'un job dans un workflow *)
 type job_state =
   | Pending
@@ -12,12 +14,13 @@ type job_state =
 (* Un workflow actif avec son état *)
 type active_workflow = {
   id : string;
-  graph : Dag.dag;
+  graph : Dag.dag; (* Structure optimisée Map *)
   states : (string, job_state) Hashtbl.t;
   mutable completed_count : int;
 }
 
 (* L'état global de l'orchestrateur *)
+(* TODO: Pour la V2, remplacer Hashtbl par une persistence Redis/DB *)
 type t = {
   workflows : (string, active_workflow) Hashtbl.t;
   ironforge_url : string;
@@ -29,13 +32,19 @@ let create ?(ironforge_url = "http://localhost:3000") () : t =
 
 (* Démarre un nouveau workflow *)
 let start_workflow (orch : t) (workflow_id : string) (graph : Dag.dag) : string list =
-  let states = Hashtbl.create (List.length graph) in
-  List.iter (fun (n : Dag.node) -> Hashtbl.add states n.Dag.id Pending) graph;
+  (* Récupère tous les nœuds pour initialiser l'état *)
+  let all_nodes = Dag.all_nodes graph in
+  let count = List.length all_nodes in
+  let states = Hashtbl.create count in
+  
+  List.iter (fun (n : Dag.node) -> Hashtbl.add states n.Dag.id Pending) all_nodes;
   
   let wf = { id = workflow_id; graph; states; completed_count = 0 } in
   Hashtbl.add orch.workflows workflow_id wf;
   
-  let ready = List.filter (fun (n : Dag.node) -> n.Dag.depends_on = []) graph in
+  (* Trouve les jobs racines (sans dépendances) *)
+  let ready = List.filter (fun (n : Dag.node) -> n.Dag.depends_on = []) all_nodes in
+  
   List.iter (fun (n : Dag.node) -> Hashtbl.replace states n.Dag.id Running) ready;
   List.map (fun (n : Dag.node) -> n.Dag.id) ready
 
@@ -47,6 +56,10 @@ let job_completed (orch : t) (workflow_id : string) (job_id : string) : string l
       Hashtbl.replace wf.states job_id Completed;
       wf.completed_count <- wf.completed_count + 1;
       
+      (* On regarde les enfants du job terminé *)
+      let children = Dag.get_children wf.graph job_id in
+      
+      (* Pour chaque enfant, on vérifie si TOUTES ses dépendances sont satisfaites *)
       let ready = List.filter (fun (n : Dag.node) ->
         Hashtbl.find wf.states n.Dag.id = Pending &&
         List.for_all (fun dep ->
@@ -54,7 +67,7 @@ let job_completed (orch : t) (workflow_id : string) (job_id : string) : string l
           | Some Completed -> true
           | _ -> false
         ) n.Dag.depends_on
-      ) wf.graph in
+      ) children in
       
       List.iter (fun (n : Dag.node) -> Hashtbl.replace wf.states n.Dag.id Running) ready;
       List.map (fun (n : Dag.node) -> n.Dag.id) ready
@@ -63,7 +76,9 @@ let job_completed (orch : t) (workflow_id : string) (job_id : string) : string l
 let is_workflow_done (orch : t) (workflow_id : string) : bool =
   match Hashtbl.find_opt orch.workflows workflow_id with
   | None -> true
-  | Some wf -> wf.completed_count >= List.length wf.graph
+  | Some wf -> 
+      let total_nodes = List.length (Dag.all_nodes wf.graph) in
+      wf.completed_count >= total_nodes
 
 (* Supprime un workflow terminé *)
 let cleanup_workflow (orch : t) (workflow_id : string) : unit =
