@@ -98,7 +98,7 @@ cargo test
 ### 1. Start the Server
 
 ```bash
-# Default: http://127.0.0.1:3000
+# Default: x
 cargo run --bin server
 
 # Custom Redis URL
@@ -129,7 +129,7 @@ cargo run --example advanced_submit
 
 **Or use curl:**
 ```bash
-curl -X POST http://localhost:3000/jobs \
+curl -X POST x \
   -H "Content-Type: application/json" \
   -d '{
     "kind": "email.send",
@@ -273,7 +273,7 @@ async fn generate_report(job: &Job) -> Result<()> {
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let backend = Arc::new(RedisQueueBackend::new("redis://127.0.0.1:6379").await?);
+    let backend = Arc::new(RedisQueueBackend::new("x").await?);
     let handler = Arc::new(MyHandler);
     
     let config = ExecutorConfig {
@@ -316,7 +316,7 @@ All metrics are exposed at `/metrics` in Prometheus format:
 scrape_configs:
   - job_name: 'ironforge'
     static_configs:
-      - targets: ['localhost:3000']
+      - targets: ['x']
 ```
 
 ---
@@ -406,8 +406,8 @@ Formula: `min(base_delay * 2^retry_count, max_delay)`
 
 ### Environment Variables
 
-- `REDIS_URL` - Redis connection string (default: `redis://127.0.0.1:6379`)
-- `BIND_ADDR` - Server bind address (default: `127.0.0.1:3000`)
+- `REDIS_URL` - Redis connection string (default: `x`)
+- `BIND_ADDR` - Server bind address (default: `x`)
 - `RUST_LOG` - Logging level (debug, info, warn, error)
 
 ### Executor Config
